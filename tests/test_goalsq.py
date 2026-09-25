@@ -371,6 +371,7 @@ def test_numbered_help_lists_available_set_fields(goals, monkeypatch, capsys):
     help_text = capsys.readouterr().out
     assert "usage: goalsq 2" in help_text
     assert "goalsq 2 set FIELD VALUE" in help_text
+    assert "goalsq 2 now|later|done" in help_text
     assert "text, status, note, evidence, due, blocked-on" in help_text
     assert "LATER, NOW, DONE" in help_text
     assert "--date YYYY-MM-DD" in help_text
@@ -399,6 +400,30 @@ def test_goal_first_read_and_lowercase_status(goals, tmp_path, monkeypatch, caps
     assert capsys.readouterr().out == "1. [ ] first [NOW]\n   existing note\n"
     assert invoke(goals, monkeypatch, "get", "1", "--date", "2026-09-25") == 0
     assert capsys.readouterr().out == "1. [ ] first [NOW]\n   existing note\n"
+
+
+def test_number_first_status_changes_preserve_notes_and_date(
+    goals, tmp_path, monkeypatch, capsys
+):
+    page = tmp_path / "2026_09_25.md"
+    page.write_text(
+        "- [[Goals]]\n\t- LATER first\n\t\t- existing note\n\t- DONE finished\n"
+    )
+    assert invoke(goals, monkeypatch, "--date", "2026-09-25", "1", "now") == 0
+    assert page.read_text() == (
+        "- [[Goals]]\n\t- NOW first\n\t\t- existing note\n\t- DONE finished\n"
+    )
+    assert "1. [ ] first [NOW]" in capsys.readouterr().out
+    assert invoke(goals, monkeypatch, "1", "DONE", "--date", "2026-09-25") == 0
+    assert page.read_text() == (
+        "- [[Goals]]\n\t- DONE finished\n\t- DONE first\n\t\t- existing note\n"
+    )
+    assert "2. [x] first" in capsys.readouterr().out
+    assert invoke(goals, monkeypatch, "2", "later", "--date", "2026-09-25") == 0
+    assert page.read_text() == (
+        "- [[Goals]]\n\t- LATER first\n\t\t- existing note\n\t- DONE finished\n"
+    )
+    assert "1. [ ] first" in capsys.readouterr().out
 
 
 def test_set_now_status_preserves_goal_and_rejects_unknown_status(

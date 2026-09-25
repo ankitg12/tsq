@@ -33,7 +33,8 @@ goalsq                                   # NOW, LATER, DONE in separate groups
 goalsq -s now                            # show only NOW; numbers stay stable
 goalsq 2                                 # inspect goal 2 and its child notes
 goalsq 2 set note "Case log saved"       # append a child note
-goalsq 2 set status done
+goalsq 2 now                           # mark active (also later or done)
+goalsq 2 set status done               # longer form still works
 goalsq done 1 "Review sent"              # mark done with a note
 goalsq top 2                              # move goal 2 to the top
 goalsq history 7                          # inspect the last seven days

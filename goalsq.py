@@ -250,6 +250,7 @@ def main() -> int:
                 prog=f"goalsq {n}",
                 description="Show this goal or change one of its fields.",
                 epilog=(
+                    f"goalsq {n} now|later|done  change status directly\n"
                     f"goalsq {n} set FIELD VALUE  change a field (note appends)\n"
                     f"FIELD: {', '.join(SET_FIELDS)}\n"
                     "status values: LATER, NOW, DONE (case-insensitive)"
@@ -263,6 +264,8 @@ def main() -> int:
             return 0
         if not rest or rest[0] == "--date":
             argv = argv[:offset] + ["get", n] + rest
+        elif rest[0].upper() in ("NOW", "LATER", "DONE"):
+            argv = argv[:offset] + ["set", n, "status", rest[0]] + rest[1:]
         elif rest[0] == "set":
             if len(rest) > 1 and rest[1] in ("--help", "-h"):
                 set_help = argparse.ArgumentParser(
