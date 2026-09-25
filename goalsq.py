@@ -176,13 +176,13 @@ def print_goals(page: Page, status: str | None = None) -> None:
                 print()
             print(f"{marker}:")
         for n in numbers:
-            print_goal(page, n)
+            print_goal(page, n, show_status=False)
         printed = True
 
 
-def print_goal(page: Page, n: int) -> None:
+def print_goal(page: Page, n: int, show_status: bool = True) -> None:
     g = page.goals[n - 1]
-    active = " [NOW]" if page.raw(n - 1).startswith("NOW ") else ""
+    active = " [NOW]" if show_status and page.raw(n - 1).startswith("NOW ") else ""
     print(f"{n}. [{'x' if page.done(n - 1) else ' '}] {shown(g)}{active}")
     for line in page.items[n - 1][1:]:
         if line.startswith("\t\t- "):
