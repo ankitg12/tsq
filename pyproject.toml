@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "goalsq"
+name = "tsq"
 version = "0.1.0"
 description = "Daily priorities in Logseq Markdown journals from the terminal"
 readme = "README.md"
@@ -18,7 +18,7 @@ classifiers = [
 ]
 
 [project.scripts]
-goalsq = "goalsq:main"
+tsq = "tsq:main"
 
 [tool.setuptools]
-py-modules = ["goalsq"]
+py-modules = ["tsq"]

@@ -11,8 +11,8 @@ import pytest
 
 @pytest.fixture
 def goals(tmp_path, monkeypatch):
-    script = Path(__file__).resolve().parents[1] / "goalsq.py"
-    spec = importlib.util.spec_from_file_location("goalsq", script)
+    script = Path(__file__).resolve().parents[1] / "tsq.py"
+    spec = importlib.util.spec_from_file_location("tsq", script)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, "JOURNALS_DIR", tmp_path)
@@ -20,7 +20,7 @@ def goals(tmp_path, monkeypatch):
 
 
 def invoke(goals, monkeypatch, *args):
-    monkeypatch.setattr(sys, "argv", ["goalsq", *args])
+    monkeypatch.setattr(sys, "argv", ["tsq", *args])
     return goals.main()
 
 
@@ -81,7 +81,18 @@ def test_done_note_is_nested_and_visible(goals, tmp_path, monkeypatch, capsys):
         "- [[Goals]]\n\t- LATER first\n\t- LATER check new llm\n"
         "\t\tid:: existing\n- journal entry\n"
     )
-    assert invoke(goals, monkeypatch, "done", "2", "added gpt 6 models") == 0
+    assert (
+        invoke(
+            goals,
+            monkeypatch,
+            "done",
+            "2",
+            "added gpt 6 models",
+            "--date",
+            "2026-09-25",
+        )
+        == 0
+    )
     assert page.read_text() == (
         "- [[Goals]]\n\t- LATER first\n\t- DONE check new llm\n"
         "\t\tid:: existing\n\t\t- added gpt 6 models\n- journal entry\n"
@@ -89,9 +100,9 @@ def test_done_note_is_nested_and_visible(goals, tmp_path, monkeypatch, capsys):
     assert capsys.readouterr().out == (
         "LATER:\n1. [ ] first\n\nDONE:\n2. [x] check new llm\n   added gpt 6 models\n"
     )
-    assert invoke(goals, monkeypatch) == 0
+    assert invoke(goals, monkeypatch, "--date", "2026-09-25") == 0
     assert "2. [x] check new llm\n   added gpt 6 models" in capsys.readouterr().out
-    assert invoke(goals, monkeypatch, "undo", "2") == 0
+    assert invoke(goals, monkeypatch, "undo", "2", "--date", "2026-09-25") == 0
     assert (
         "\t- LATER check new llm\n\t\tid:: existing\n\t\t- added gpt 6 models"
         in page.read_text()
@@ -222,7 +233,7 @@ def test_status_filter_empty_result_and_invalid_uses(
 def test_done_without_note_keeps_existing_behavior(goals, tmp_path, monkeypatch):
     page = tmp_path / "2026_09_25.md"
     page.write_text("- [[Goals]]\n\t- LATER one\n")
-    assert invoke(goals, monkeypatch, "done", "1") == 0
+    assert invoke(goals, monkeypatch, "done", "1", "--date", "2026-09-25") == 0
     assert page.read_text() == "- [[Goals]]\n\t- DONE one\n"
 
 
@@ -369,20 +380,20 @@ def test_optional_fields_replace_without_duplication(
 def test_numbered_help_lists_available_set_fields(goals, monkeypatch, capsys):
     assert invoke(goals, monkeypatch, "2", "-h") == 0
     help_text = capsys.readouterr().out
-    assert "usage: goalsq 2" in help_text
-    assert "goalsq 2 set FIELD VALUE" in help_text
-    assert "goalsq 2 now|later|done" in help_text
+    assert "usage: tsq 2" in help_text
+    assert "tsq 2 set FIELD VALUE" in help_text
+    assert "tsq 2 now|later|done" in help_text
     assert "text, status, note, evidence, due, blocked-on" in help_text
     assert "LATER, NOW, DONE" in help_text
     assert "--date YYYY-MM-DD" in help_text
     assert invoke(goals, monkeypatch, "--date", "2026-09-25", "2", "-h") == 0
-    assert "goalsq 2 set FIELD VALUE" in capsys.readouterr().out
+    assert "tsq 2 set FIELD VALUE" in capsys.readouterr().out
     assert invoke(goals, monkeypatch, "2", "set", "-h") == 0
     set_help = capsys.readouterr().out
-    assert "usage: goalsq 2 set" in set_help
+    assert "usage: tsq 2 set" in set_help
     assert "{text,status,note,evidence,due,blocked-on}" in set_help
     assert "status values: LATER, NOW, DONE" in set_help
-    assert "usage: goalsq set" not in set_help
+    assert "usage: tsq set" not in set_help
 
 
 def test_goal_first_read_and_lowercase_status(goals, tmp_path, monkeypatch, capsys):
@@ -459,8 +470,8 @@ def test_configured_second_graph_preserves_other_blocks(tmp_path):
     graph_one_page.write_text("- [[Goals]]\n\t- LATER keep this\n")
     second_page = graph_two / "2026_09_25.md"
     second_page.write_text("- 09:00 unrelated journal entry\n")
-    env = {**os.environ, "GOALSQ_JOURNALS_DIR": str(graph_two)}
-    script = Path(__file__).resolve().parents[1] / "goalsq.py"
+    env = {**os.environ, "TSQ_JOURNALS_DIR": str(graph_two)}
+    script = Path(__file__).resolve().parents[1] / "tsq.py"
     added = subprocess.run(
         [
             sys.executable,
@@ -490,3 +501,41 @@ def test_configured_second_graph_preserves_other_blocks(tmp_path):
         check=True,
     )
     assert listed.stdout == "1. [ ] draft review\n"
+
+
+def test_carry_copies_open_goals_with_notes_but_not_block_ids(
+    goals, tmp_path, monkeypatch, capsys
+):
+    (tmp_path / "2026_09_25.md").write_text(
+        "- [[Goals]]\n\t- NOW first\n\t\tid:: 66f0-abc\n\t\t- step one\n"
+        "\t- LATER second\n\t- DONE finished\n\t- CANCELED dropped\n- 09:00 log\n"
+    )
+    # 09-26 and 09-27 have no goals, so 09-25 is the source.
+    (tmp_path / "2026_09_27.md").write_text("- 10:00 weekend note\n")
+    today = tmp_path / "2026_09_28.md"
+    today.write_text("- [[Goals]]\n\t- LATER second\n- 11:00 standup\n")
+    assert invoke(goals, monkeypatch, "carry", "--date", "2026-09-28") == 0
+    out = capsys.readouterr().out
+    assert out.startswith("CARRIED 1 from 2026-09-25, 1 already present\n")
+    assert today.read_text() == (
+        "- [[Goals]]\n\t- LATER second\n\t- NOW first\n\t\t- step one\n"
+        "- 11:00 standup\n"
+    )
+    before = today.read_text()
+    assert invoke(goals, monkeypatch, "carry", "--date", "2026-09-28") == 0
+    assert capsys.readouterr().out == "CARRIED 0 from 2026-09-25, 2 already present\n"
+    assert today.read_text() == before
+
+
+def test_carry_explicit_source_and_missing_source(goals, tmp_path, monkeypatch, capsys):
+    (tmp_path / "2026_09_20.md").write_text("- [[Goals]]\n\t- LATER old\n")
+    assert (
+        invoke(
+            goals, monkeypatch, "carry", "--from", "2026-09-20", "--date", "2026-09-28"
+        )
+        == 0
+    )
+    assert "CARRIED 1 from 2026-09-20" in capsys.readouterr().out
+    assert invoke(goals, monkeypatch, "carry", "--date", "2026-01-01") == 1
+    assert capsys.readouterr().out.startswith("NO_SOURCE")
+    assert not (tmp_path / "2026_01_01.md").exists()

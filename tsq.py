@@ -12,23 +12,26 @@ Reorder in Logseq with Alt+Shift+Up/Down (or drag), or here with `top`/`mv`.
 Every day's goals link to the [[Goals]] page, so that page lists them all.
 The journal file is the source of truth; no Logseq server or lsq executable is needed.
 
-Usage (set GOALSQ_JOURNALS_DIR for a graph outside ~/Logseq/journals):
-  goalsq [--date YYYY-MM-DD]                  list NOW, LATER, then DONE goals
-  goalsq --status now|later|done              filter the list by status
-  goalsq N [--date YYYY-MM-DD]                show one goal with its notes
-  goalsq add [-s now|later|done] "text"       append a goal (default LATER)
-  goalsq N set text "text"                    edit the goal title
-  goalsq N set status now                     set LATER, NOW, or DONE
-  goalsq N set note "text"                    append a note to the goal
-  goalsq N set evidence "proof"               set optional completion evidence
-  goalsq N set due YYYY-MM-DD                 set optional due date
-  goalsq N set blocked-on "reason"            set optional blocker
-  goalsq top N                                 move goal N to priority 1
-  goalsq mv N M                                move goal N to position M
-  goalsq rm N                                  remove goal N
-  goalsq done N ["note"]                        mark DONE and optionally add a child note
-  goalsq undo N                                 mark goal N open again
-  goalsq history [N]                           goals for the last N days (default 7)
+Usage (set TSQ_JOURNALS_DIR for a graph outside ~/Logseq/journals):
+  tsq [--date YYYY-MM-DD]               list NOW, LATER, then DONE goals
+  tsq --status now|later|done           filter the list by status
+  tsq N [--date YYYY-MM-DD]             show one goal with its notes
+  tsq add [-s now|later|done] "text"    append a goal (default LATER)
+  tsq N now|later|done                  change status directly
+  tsq N set text "text"                 edit the goal title
+  tsq N set status now                  set LATER, NOW, or DONE
+  tsq N set note "text"                 append a note to the goal
+  tsq N set evidence "proof"            set optional completion evidence
+  tsq N set due YYYY-MM-DD              set optional due date
+  tsq N set blocked-on "reason"         set optional blocker
+  tsq top N                             move goal N to priority 1
+  tsq mv N M                            move goal N to position M
+  tsq rm N                              remove goal N
+  tsq done N ["note"]                   mark DONE and optionally add a child note
+  tsq undo N                            mark goal N open again
+  tsq carry [--from YYYY-MM-DD]         copy open goals from the last day that
+                                        had goals (or --from) into today
+  tsq history [N]                       goals for the last N days (default 7)
 
 Also reads legacy `goal:: a; b` page properties and `- Goals` blocks;
 any write converts them to the format above.
@@ -43,7 +46,7 @@ import sys
 from pathlib import Path
 
 JOURNALS_DIR = Path(
-    os.environ.get("GOALSQ_JOURNALS_DIR", str(Path.home() / "Logseq" / "journals"))
+    os.environ.get("TSQ_JOURNALS_DIR", str(Path.home() / "Logseq" / "journals"))
 ).expanduser()
 # Some older journals written on Windows are not valid UTF-8; surrogateescape
 # round-trips their bytes unchanged instead of failing or corrupting them.
@@ -57,6 +60,11 @@ MARKER_RE = re.compile(r"^(TODO|LATER|NOW|DOING|DONE|CANCELED|CANCELLED) ")
 OPEN = "LATER"
 SET_FIELDS = ("text", "status", "note", "evidence", "due", "blocked-on")
 PROP_RE = re.compile(r"^([A-Za-z][\w-]*):: ?(.*)$")
+# Closed markers are not carried to the next day.
+CLOSED = ("DONE ", "CANCELED ", "CANCELLED ")
+# A block id must stay unique in the graph, so a carried copy drops it.
+ID_PROP_RE = re.compile(r"^\s*id:: ")
+CARRY_LOOKBACK_DAYS = 30
 
 
 def journal_path(date_str: str | None = None) -> Path:
@@ -140,6 +148,33 @@ def save(path: Path, page: Page) -> None:
     path.write_text(page.render(), **ENC)
 
 
+def carry_source(target: datetime.date) -> datetime.date | None:
+    """The nearest day before target whose journal has at least one goal."""
+    for back in range(1, CARRY_LOOKBACK_DAYS + 1):
+        d = target - datetime.timedelta(days=back)
+        path = journal_path(d.isoformat())
+        if path.exists() and Page(path.read_text(**ENC)).items:
+            return d
+    return None
+
+
+def carry(page: Page, source: Page) -> tuple[int, int]:
+    """Append source's open goals (with notes, without block ids) to page.
+    Goals whose title is already on the page are skipped, so carry is idempotent."""
+    present = set(page.goals)
+    carried = skipped = 0
+    for i, item in enumerate(source.items):
+        if source.raw(i).startswith(CLOSED):
+            continue
+        if source.goals[i] in present:
+            skipped += 1
+            continue
+        page.items.append([item[0]] + [l for l in item[1:] if not ID_PROP_RE.match(l)])
+        present.add(source.goals[i])
+        carried += 1
+    return carried, skipped
+
+
 def index(page: Page, n: int) -> int:
     if not 1 <= n <= len(page.items):
         print(f"NO_SUCH_GOAL: {n} (have {len(page.items)})", file=sys.stderr)
@@ -195,7 +230,7 @@ def print_goal(page: Page, n: int, show_status: bool = True) -> None:
 
 def main() -> int:
     p = argparse.ArgumentParser(
-        prog="goalsq",
+        prog="tsq",
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -239,6 +274,18 @@ def main() -> int:
         s.add_argument("n", type=int)
         if name == "done":
             s.add_argument("note", nargs="*", help="Optional completion note")
+    c = sub.add_parser(
+        "carry",
+        parents=[dp],
+        help="Copy open goals from the last day that had goals into this day",
+    )
+    c.add_argument(
+        "--from",
+        dest="source",
+        metavar="YYYY-MM-DD",
+        help=f"Source day (default: nearest earlier day with goals, "
+        f"up to {CARRY_LOOKBACK_DAYS} days back)",
+    )
     h = sub.add_parser("history", help="Goals for the last N days")
     h.add_argument("days", nargs="?", type=int, default=7)
     argv = sys.argv[1:]
@@ -247,11 +294,11 @@ def main() -> int:
         n, rest = argv[offset], argv[offset + 1 :]
         if rest and rest[0] in ("--help", "-h"):
             help_parser = argparse.ArgumentParser(
-                prog=f"goalsq {n}",
+                prog=f"tsq {n}",
                 description="Show this goal or change one of its fields.",
                 epilog=(
-                    f"goalsq {n} now|later|done  change status directly\n"
-                    f"goalsq {n} set FIELD VALUE  change a field (note appends)\n"
+                    f"tsq {n} now|later|done  change status directly\n"
+                    f"tsq {n} set FIELD VALUE  change a field (note appends)\n"
                     f"FIELD: {', '.join(SET_FIELDS)}\n"
                     "status values: LATER, NOW, DONE (case-insensitive)"
                 ),
@@ -269,7 +316,7 @@ def main() -> int:
         elif rest[0] == "set":
             if len(rest) > 1 and rest[1] in ("--help", "-h"):
                 set_help = argparse.ArgumentParser(
-                    prog=f"goalsq {n} set",
+                    prog=f"tsq {n} set",
                     description="Change a goal field; note appends a child note.",
                     epilog="status values: LATER, NOW, DONE (case-insensitive)",
                 )
@@ -318,6 +365,35 @@ def main() -> int:
         return 0
 
     path, page = load(args.date)
+    if args.cmd == "carry":
+        target = (
+            datetime.date.fromisoformat(args.date)
+            if args.date
+            else datetime.date.today()
+        )
+        source = (
+            datetime.date.fromisoformat(args.source)
+            if args.source
+            else carry_source(target)
+        )
+        if source is None:
+            print(
+                f"NO_SOURCE: no goals in the {CARRY_LOOKBACK_DAYS} days before {target}"
+            )
+            return 1
+        if source == target:
+            print("BAD_SOURCE: source and target are the same day.", file=sys.stderr)
+            return 2
+        src_path = journal_path(source.isoformat())
+        src = Page(src_path.read_text(**ENC) if src_path.exists() else "")
+        carried, skipped = carry(page, src)
+        note = f", {skipped} already present" if skipped else ""
+        print(f"CARRIED {carried} from {source}{note}")
+        if not carried:
+            return 0
+        save(path, page)
+        print_goals(page)
+        return 0
     if args.cmd == "add":
         text = " ".join(args.text).strip()
         if not text or "\n" in text:
