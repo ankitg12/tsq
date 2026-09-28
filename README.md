@@ -1,8 +1,8 @@
 # tsq
 
-`tsq` (task queue) is a small CLI for a **daily task queue in Logseq Markdown journals**. It reads and writes the first `- [[Goals]]` block of each dated journal file. The journal is the only task store: edits made in Logseq appear in `tsq`, and edits made with `tsq` appear in Logseq.
+`tsq` (task queue) is a small CLI for a **daily task queue in Logseq Markdown journals**. It reads and writes the first `- [[Tasks]]` block of each dated journal file. The journal is the only task store: edits made in Logseq appear in `tsq`, and edits made with `tsq` appear in Logseq.
 
-`tsq` complements [lsq](https://github.com/jrswab/lsq), the journal capture CLI. It does **not** call `lsq` or require the Logseq desktop app or HTTP API. It is not a long-term goal or project tracker. It was named `goalsq` before version 0.2.0.
+`tsq` complements [lsq](https://github.com/jrswab/lsq), the journal capture CLI. It does **not** call `lsq` or require the Logseq desktop app or HTTP API. It is not a long-term goal or project tracker. It was named `goalsq` before version 0.2.0. Before 0.3.0 the block was `- [[Goals]]`; `tsq` still reads it and writes `- [[Tasks]]` on the next change to that day.
 
 ## Install
 
@@ -48,14 +48,14 @@ tsq carry                              # copy open items from the last day that 
 A journal entry looks like this (tabs indent child blocks):
 
 ```markdown
-- [[Goals]]
+- [[Tasks]]
 	- NOW Draft the review
 		- Case log saved
 	- LATER Check the test results
 - 15:00 Notes from the meeting
 ```
 
-On a write, `tsq` places completed entries after open ones and keeps other journal blocks. Keep your graph backed up, as with any tool that edits notes. The parser recognizes the first `- [[Goals]]` block and task items indented with a tab or two spaces; other layouts and Org-mode graphs are not supported.
+On a write, `tsq` places completed entries after open ones and keeps other journal blocks. Keep your graph backed up, as with any tool that edits notes. The parser recognizes the first `- [[Tasks]]` block and task items indented with a tab or two spaces; other layouts and Org-mode graphs are not supported.
 
 ## Develop
 

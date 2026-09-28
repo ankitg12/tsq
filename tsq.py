@@ -3,13 +3,13 @@
 
 The tasks are the first block of the journal page, so Logseq shows them first:
 
-    - [[Goals]]
+    - [[Tasks]]
         - LATER draft proposal           <- priority 1
         - NOW test an import
     - 11:15 other journal blocks ...
 
 Reorder in Logseq with Alt+Shift+Up/Down (or drag), or here with `top`/`mv`.
-Every day's tasks sit under a link to the [[Goals]] page, so that page lists them all.
+Every day's tasks sit under a link to the [[Tasks]] page, so that page lists them all.
 The journal file is the source of truth; no Logseq server or lsq executable is needed.
 
 Usage (set TSQ_JOURNALS_DIR for a graph outside ~/Logseq/journals):
@@ -33,7 +33,7 @@ Usage (set TSQ_JOURNALS_DIR for a graph outside ~/Logseq/journals):
                                         had tasks (or --from) into today
   tsq history [N]                       tasks for the last N days (default 7)
 
-Also reads legacy `goal:: a; b` page properties and `- Goals` blocks;
+Also reads the older `- [[Goals]]` and `- Goals` blocks and `goal:: a; b` page properties;
 any write converts them to the format above.
 Stdlib only: the layout is fixed and small, so no Logseq parser is needed.
 """
@@ -51,8 +51,9 @@ JOURNALS_DIR = Path(
 # Some older journals written on Windows are not valid UTF-8; surrogateescape
 # round-trips their bytes unchanged instead of failing or corrupting them.
 ENC = {"encoding": "utf-8", "errors": "surrogateescape"}
-HEADER = "- [[Goals]]"
-HEADER_RE = re.compile(r"^- (\[\[Goals\]\]|Goals)\s*$")
+HEADER = "- [[Tasks]]"
+# `[[Goals]]` was the header before 0.3.0; a write converts it to `[[Tasks]]`.
+HEADER_RE = re.compile(r"^- (\[\[(Tasks|Goals)\]\]|Tasks|Goals)\s*$")
 ITEM_RE = re.compile(r"^(\t| {2})- (.*)$")
 # Logseq task markers; goals are native tasks, so the checkbox works in Logseq too.
 # New goals use Logseq's LATER task marker; other workflows remain readable.
