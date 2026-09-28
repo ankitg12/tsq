@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Today's goals in the Logseq journal — one goal per line, ordered by priority.
+"""tsq — a daily task queue in the Logseq journal, one task per line, in priority order.
 
-The goals are the first block of the journal page, so Logseq shows them first:
+The tasks are the first block of the journal page, so Logseq shows them first:
 
     - [[Goals]]
         - LATER draft proposal           <- priority 1
@@ -9,29 +9,29 @@ The goals are the first block of the journal page, so Logseq shows them first:
     - 11:15 other journal blocks ...
 
 Reorder in Logseq with Alt+Shift+Up/Down (or drag), or here with `top`/`mv`.
-Every day's goals link to the [[Goals]] page, so that page lists them all.
+Every day's tasks sit under a link to the [[Goals]] page, so that page lists them all.
 The journal file is the source of truth; no Logseq server or lsq executable is needed.
 
 Usage (set TSQ_JOURNALS_DIR for a graph outside ~/Logseq/journals):
-  tsq [--date YYYY-MM-DD]               list NOW, LATER, then DONE goals
+  tsq [--date YYYY-MM-DD]               list NOW, LATER, then DONE tasks
   tsq --status now|later|done           filter the list by status
-  tsq N [--date YYYY-MM-DD]             show one goal with its notes
-  tsq add [-s now|later|done] "text"    append a goal (default LATER)
+  tsq N [--date YYYY-MM-DD]             show one task with its notes
+  tsq add [-s now|later|done] "text"    append a task (default LATER)
   tsq N now|later|done                  change status directly
-  tsq N set text "text"                 edit the goal title
+  tsq N set text "text"                 edit the task title
   tsq N set status now                  set LATER, NOW, or DONE
-  tsq N set note "text"                 append a note to the goal
+  tsq N set note "text"                 append a note to the task
   tsq N set evidence "proof"            set optional completion evidence
   tsq N set due YYYY-MM-DD              set optional due date
   tsq N set blocked-on "reason"         set optional blocker
-  tsq top N                             move goal N to priority 1
-  tsq mv N M                            move goal N to position M
-  tsq rm N                              remove goal N
+  tsq top N                             move task N to priority 1
+  tsq mv N M                            move task N to position M
+  tsq rm N                              remove task N
   tsq done N ["note"]                   mark DONE and optionally add a child note
-  tsq undo N                            mark goal N open again
-  tsq carry [--from YYYY-MM-DD]         copy open goals from the last day that
-                                        had goals (or --from) into today
-  tsq history [N]                       goals for the last N days (default 7)
+  tsq undo N                            mark task N open again
+  tsq carry [--from YYYY-MM-DD]         copy open tasks from the last day that
+                                        had tasks (or --from) into today
+  tsq history [N]                       tasks for the last N days (default 7)
 
 Also reads legacy `goal:: a; b` page properties and `- Goals` blocks;
 any write converts them to the format above.
@@ -177,7 +177,7 @@ def carry(page: Page, source: Page) -> tuple[int, int]:
 
 def index(page: Page, n: int) -> int:
     if not 1 <= n <= len(page.items):
-        print(f"NO_SUCH_GOAL: {n} (have {len(page.items)})", file=sys.stderr)
+        print(f"NO_SUCH_TASK: {n} (have {len(page.items)})", file=sys.stderr)
         sys.exit(2)
     return n - 1
 
@@ -240,14 +240,14 @@ def main() -> int:
         "--status",
         type=str.upper,
         choices=("NOW", "LATER", "DONE"),
-        help="Show only goals in this status (list only)",
+        help="Show only tasks in this status (list only)",
     )
     dp = argparse.ArgumentParser(add_help=False)  # --date also after the subcommand
     dp.add_argument("--date", metavar="YYYY-MM-DD", default=argparse.SUPPRESS)
     sub = p.add_subparsers(dest="cmd")
-    g = sub.add_parser("get", parents=[dp], help="Show one goal with its notes")
-    g.add_argument("n", type=int, help="Goal number")
-    a = sub.add_parser("add", parents=[dp], help="Append a goal")
+    g = sub.add_parser("get", parents=[dp], help="Show one task with its notes")
+    g.add_argument("n", type=int, help="Task number")
+    a = sub.add_parser("add", parents=[dp], help="Append a task")
     a.add_argument(
         "-s",
         "--status",
@@ -258,18 +258,18 @@ def main() -> int:
         help="Initial status (default: LATER)",
     )
     a.add_argument("text", nargs="+")
-    s = sub.add_parser("set", parents=[dp], help="Set a goal field or append a note")
+    s = sub.add_parser("set", parents=[dp], help="Set a task field or append a note")
     s.add_argument("n", type=int)
     s.add_argument("field", choices=SET_FIELDS)
     s.add_argument("value", nargs="+")
-    t = sub.add_parser("top", parents=[dp], help="Move goal N to priority 1")
+    t = sub.add_parser("top", parents=[dp], help="Move task N to priority 1")
     t.add_argument("n", type=int)
-    m = sub.add_parser("mv", parents=[dp], help="Move goal N to position M")
+    m = sub.add_parser("mv", parents=[dp], help="Move task N to position M")
     m.add_argument("n", type=int)
     m.add_argument("to", type=int)
-    r = sub.add_parser("rm", parents=[dp], help="Remove goal N")
+    r = sub.add_parser("rm", parents=[dp], help="Remove task N")
     r.add_argument("n", type=int)
-    for name, hlp in (("done", "Mark goal N DONE"), ("undo", "Mark goal N open again")):
+    for name, hlp in (("done", "Mark task N DONE"), ("undo", "Mark task N open again")):
         s = sub.add_parser(name, parents=[dp], help=hlp)
         s.add_argument("n", type=int)
         if name == "done":
@@ -277,16 +277,16 @@ def main() -> int:
     c = sub.add_parser(
         "carry",
         parents=[dp],
-        help="Copy open goals from the last day that had goals into this day",
+        help="Copy open tasks from the last day that had tasks into this day",
     )
     c.add_argument(
         "--from",
         dest="source",
         metavar="YYYY-MM-DD",
-        help=f"Source day (default: nearest earlier day with goals, "
+        help=f"Source day (default: nearest earlier day with tasks, "
         f"up to {CARRY_LOOKBACK_DAYS} days back)",
     )
-    h = sub.add_parser("history", help="Goals for the last N days")
+    h = sub.add_parser("history", help="Tasks for the last N days")
     h.add_argument("days", nargs="?", type=int, default=7)
     argv = sys.argv[1:]
     offset = 2 if len(argv) >= 2 and argv[0] == "--date" else 0
@@ -295,7 +295,7 @@ def main() -> int:
         if rest and rest[0] in ("--help", "-h"):
             help_parser = argparse.ArgumentParser(
                 prog=f"tsq {n}",
-                description="Show this goal or change one of its fields.",
+                description="Show this task or change one of its fields.",
                 epilog=(
                     f"tsq {n} now|later|done  change status directly\n"
                     f"tsq {n} set FIELD VALUE  change a field (note appends)\n"
@@ -317,7 +317,7 @@ def main() -> int:
             if len(rest) > 1 and rest[1] in ("--help", "-h"):
                 set_help = argparse.ArgumentParser(
                     prog=f"tsq {n} set",
-                    description="Change a goal field; note appends a child note.",
+                    description="Change a task field; note appends a child note.",
                     epilog="status values: LATER, NOW, DONE (case-insensitive)",
                 )
                 set_help.add_argument("field", choices=SET_FIELDS)
@@ -330,7 +330,7 @@ def main() -> int:
             argv = argv[:offset] + ["set", n] + rest[1:]
     args = p.parse_args(argv)
     if args.status is not None and args.cmd is not None:
-        p.error("--status filters only the goals list")
+        p.error("--status filters only the task list")
 
     if args.cmd == "history":
         today = datetime.date.today()
@@ -356,7 +356,7 @@ def main() -> int:
             return 1
         page = Page(path.read_text(**ENC))
         if not page.items:
-            print("NO_GOAL_DECLARED")
+            print("NO_TASKS")
             return 1
         if args.cmd == "get":
             print_goal(page, index(page, args.n) + 1)
@@ -378,7 +378,7 @@ def main() -> int:
         )
         if source is None:
             print(
-                f"NO_SOURCE: no goals in the {CARRY_LOOKBACK_DAYS} days before {target}"
+                f"NO_SOURCE: no tasks in the {CARRY_LOOKBACK_DAYS} days before {target}"
             )
             return 1
         if source == target:
@@ -397,7 +397,7 @@ def main() -> int:
     if args.cmd == "add":
         text = " ".join(args.text).strip()
         if not text or "\n" in text:
-            print("BAD_GOAL: one non-empty line.", file=sys.stderr)
+            print("BAD_TASK: one non-empty line.", file=sys.stderr)
             return 2
         page.items.append([f"\t- {args.add_status} {text}"])
     elif args.cmd == "top":

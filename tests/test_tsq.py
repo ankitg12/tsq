@@ -301,7 +301,7 @@ def test_get_missing_and_bad_notes_do_not_change_file(
     with pytest.raises(SystemExit) as error:
         invoke(goals, monkeypatch, "get", "2", "--date", "2026-09-25")
     assert error.value.code == 2
-    assert "NO_SUCH_GOAL: 2" in capsys.readouterr().err
+    assert "NO_SUCH_TASK: 2" in capsys.readouterr().err
     for args in (("set", "1", "note", "bad\nline"), ("set", "1", "note", "   ")):
         assert invoke(goals, monkeypatch, *args, "--date", "2026-09-25") == 2
         assert "BAD_VALUE" in capsys.readouterr().err

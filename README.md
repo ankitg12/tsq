@@ -1,8 +1,8 @@
 # tsq
 
-A small CLI for **daily priorities in Logseq Markdown journals**. It reads and writes the first `- [[Goals]]` block of each dated journal file. The journal is the only task store: edits made in Logseq appear in `tsq`, and edits made with `tsq` appear in Logseq.
+`tsq` (task queue) is a small CLI for a **daily task queue in Logseq Markdown journals**. It reads and writes the first `- [[Goals]]` block of each dated journal file. The journal is the only task store: edits made in Logseq appear in `tsq`, and edits made with `tsq` appear in Logseq.
 
-`tsq` complements [lsq](https://github.com/jrswab/lsq), the journal capture CLI. It does **not** call `lsq` or require the Logseq desktop app or HTTP API. It is not a long-term goal or project tracker.
+`tsq` complements [lsq](https://github.com/jrswab/lsq), the journal capture CLI. It does **not** call `lsq` or require the Logseq desktop app or HTTP API. It is not a long-term goal or project tracker. It was named `goalsq` before version 0.2.0.
 
 ## Install
 
@@ -31,12 +31,12 @@ tsq add -s now "Draft the review"
 tsq add "Check the test results"      # defaults to LATER
 tsq                                   # NOW, LATER, DONE in separate groups
 tsq -s now                            # show only NOW; numbers stay stable
-tsq 2                                 # inspect goal 2 and its child notes
+tsq 2                                 # inspect task 2 and its child notes
 tsq 2 set note "Case log saved"       # append a child note
 tsq 2 now                           # mark active (also later or done)
 tsq 2 set status done               # longer form still works
 tsq done 1 "Review sent"              # mark done with a note
-tsq top 2                              # move goal 2 to the top
+tsq top 2                              # move task 2 to the top
 tsq history 7                          # inspect the last seven days
 tsq carry                              # copy open items from the last day that had any
 ```
