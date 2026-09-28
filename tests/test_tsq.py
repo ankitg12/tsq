@@ -539,6 +539,23 @@ def test_carry_explicit_source_and_missing_source(goals, tmp_path, monkeypatch, 
     assert not (tmp_path / "2026_01_01.md").exists()
 
 
+def test_number_first_notes_and_notes_on_status_change(
+    goals, tmp_path, monkeypatch, capsys
+):
+    page = tmp_path / "2026_09_25.md"
+    page.write_text("- [[Tasks]]\n\t- LATER a\n\t- LATER b\n")
+    d = ("--date", "2026-09-25")
+    assert invoke(goals, monkeypatch, "2", "add", "note", "do this today", *d) == 0
+    assert invoke(goals, monkeypatch, "2", "note", "second", "note", *d) == 0
+    assert invoke(goals, monkeypatch, "1", "comment", "c", *d) == 0
+    assert invoke(goals, monkeypatch, "1", "now", "started", "it", *d) == 0
+    assert invoke(goals, monkeypatch, "2", "done", "shipped", *d) == 0
+    assert page.read_text() == (
+        "- [[Tasks]]\n\t- NOW a\n\t\t- c\n\t\t- started it\n"
+        "\t- DONE b\n\t\t- do this today\n\t\t- second note\n\t\t- shipped\n"
+    )
+
+
 def test_old_goals_header_is_read_and_rewritten_as_tasks(
     goals, tmp_path, monkeypatch, capsys
 ):

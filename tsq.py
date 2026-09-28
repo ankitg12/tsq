@@ -17,7 +17,8 @@ Usage (set TSQ_JOURNALS_DIR for a graph outside ~/Logseq/journals):
   tsq --status now|later|done           filter the list by status
   tsq N [--date YYYY-MM-DD]             show one task with its notes
   tsq add [-s now|later|done] "text"    append a task (default LATER)
-  tsq N now|later|done                  change status directly
+  tsq N now|later|done ["note"]         change status, optionally with a note
+  tsq N note "text"                     append a note (also: add note, comment)
   tsq N set text "text"                 edit the task title
   tsq N set status now                  set LATER, NOW, or DONE
   tsq N set note "text"                 append a note to the task
@@ -227,6 +228,21 @@ def print_goal(page: Page, n: int, show_status: bool = True) -> None:
                 print(f"   {prop.group(1)}: {shown(prop.group(2))}")
 
 
+def split_opts(args: list[str]) -> tuple[list[str], list[str]]:
+    """Separate free words from `--date X` so a trailing note can hold any words."""
+    words: list[str] = []
+    opts: list[str] = []
+    i = 0
+    while i < len(args):
+        if args[i] == "--date" and i + 1 < len(args):
+            opts += args[i : i + 2]
+            i += 2
+        else:
+            words.append(args[i])
+            i += 1
+    return words, opts
+
+
 def main() -> int:
     p = argparse.ArgumentParser(
         prog="tsq",
@@ -287,8 +303,10 @@ def main() -> int:
     )
     h = sub.add_parser("history", help="Tasks for the last N days")
     h.add_argument("days", nargs="?", type=int, default=7)
-    argv = sys.argv[1:]
+    argv = ["-h" if a == "-?" else a for a in sys.argv[1:]]
     offset = 2 if len(argv) >= 2 and argv[0] == "--date" else 0
+    # A note given with a status change: `tsq N now "why"`.
+    status_note: str | None = None
     if len(argv) > offset and re.fullmatch(r"[0-9]+", argv[offset]):
         n, rest = argv[offset], argv[offset + 1 :]
         if rest and rest[0] in ("--help", "-h"):
@@ -311,7 +329,18 @@ def main() -> int:
         if not rest or rest[0] == "--date":
             argv = argv[:offset] + ["get", n] + rest
         elif rest[0].upper() in ("NOW", "LATER", "DONE"):
-            argv = argv[:offset] + ["set", n, "status", rest[0]] + rest[1:]
+            words, opts = split_opts(rest[1:])
+            if rest[0].upper() == "DONE":
+                argv = argv[:offset] + ["done", n] + words + opts
+            else:
+                argv = argv[:offset] + ["set", n, "status", rest[0]] + opts
+                status_note = " ".join(words).strip() or None
+        elif rest[0] in ("note", "add", "comment"):
+            # `tsq N note x`, `tsq N add note x`, `tsq N comment x`
+            body = rest[1:]
+            if rest[0] == "add" and body and body[0] in ("note", "comment"):
+                body = body[1:]
+            argv = argv[:offset] + ["set", n, "note"] + body
         elif rest[0] == "set":
             if len(rest) > 1 and rest[1] in ("--help", "-h"):
                 set_help = argparse.ArgumentParser(
@@ -426,6 +455,11 @@ def main() -> int:
                 print("BAD_STATUS: use LATER, NOW, or DONE.", file=sys.stderr)
                 return 2
             page.set_marker(i, value)
+            if status_note:
+                if "\n" in status_note or "\r" in status_note:
+                    print("BAD_NOTE: one line only.", file=sys.stderr)
+                    return 2
+                page.items[i].append(f"\t\t- {status_note}")
         elif args.field == "note":
             page.items[i].append(f"\t\t- {value}")
         elif args.field == "text":
