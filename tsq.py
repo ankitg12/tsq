@@ -141,10 +141,8 @@ def load(date_str: str | None) -> tuple[Path, Page]:
 
 
 def save(path: Path, page: Page) -> None:
-    # Keep the journal's priority order within each status group.
-    page.items.sort(
-        key=lambda item: ITEM_RE.match(item[0]).group(2).startswith("DONE ")
-    )
+    # No reordering here: a task's number is its position, and it must not
+    # change when the task's status changes. The list view groups by status.
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(page.render(), **ENC)
 
@@ -428,8 +426,6 @@ def main() -> int:
                 print("BAD_STATUS: use LATER, NOW, or DONE.", file=sys.stderr)
                 return 2
             page.set_marker(i, value)
-            if value == "DONE":
-                page.items.append(page.items.pop(i))
         elif args.field == "note":
             page.items[i].append(f"\t\t- {value}")
         elif args.field == "text":
@@ -459,7 +455,8 @@ def main() -> int:
         page.set_marker(i, "DONE")
         if note:
             page.items[i].append(f"\t\t- {note}")
-        page.items.append(page.items.pop(i))
+        # Keep the block in place: the view groups by status, and task
+        # numbers must not change when a task is closed.
     elif args.cmd == "undo":
         page.set_marker(index(page, args.n), OPEN)
     save(path, page)

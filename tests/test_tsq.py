@@ -128,7 +128,7 @@ def test_read_sorts_completed_last_without_writing_or_changing_numbers(
     assert page.read_text() == original
 
 
-def test_done_moves_goal_and_note_after_existing_completed_goals(
+def test_done_keeps_task_in_place_so_numbers_stay_stable(
     goals, tmp_path, monkeypatch, capsys
 ):
     page = tmp_path / "2026_09_25.md"
@@ -143,18 +143,16 @@ def test_done_moves_goal_and_note_after_existing_completed_goals(
         == 0
     )
     assert page.read_text() == (
-        "- [[Tasks]]\n\t- LATER second\n\t- DONE old\n\t\t- old note\n"
-        "\t- DONE first\n\t\t- proof recorded\n- journal entry\n"
+        "- [[Tasks]]\n\t- DONE first\n\t\t- proof recorded\n\t- LATER second\n"
+        "\t- DONE old\n\t\t- old note\n- journal entry\n"
     )
     assert capsys.readouterr().out == (
-        "LATER:\n1. [ ] second\n\nDONE:\n2. [x] old\n   old note\n"
-        "3. [x] first\n   proof recorded\n"
+        "LATER:\n2. [ ] second\n\nDONE:\n1. [x] first\n   proof recorded\n"
+        "3. [x] old\n   old note\n"
     )
 
 
-def test_set_done_moves_last_and_undo_returns_to_open_group(
-    goals, tmp_path, monkeypatch, capsys
-):
+def test_set_done_and_undo_keep_numbers(goals, tmp_path, monkeypatch, capsys):
     page = tmp_path / "2026_09_25.md"
     page.write_text("- [[Tasks]]\n\t- LATER first\n\t- LATER second\n\t- DONE old\n")
     assert (
@@ -162,19 +160,19 @@ def test_set_done_moves_last_and_undo_returns_to_open_group(
         == 0
     )
     assert page.read_text() == (
-        "- [[Tasks]]\n\t- LATER second\n\t- DONE old\n\t- DONE first\n"
+        "- [[Tasks]]\n\t- DONE first\n\t- LATER second\n\t- DONE old\n"
     )
     capsys.readouterr()
-    assert invoke(goals, monkeypatch, "undo", "2", "--date", "2026-09-25") == 0
+    assert invoke(goals, monkeypatch, "undo", "3", "--date", "2026-09-25") == 0
     assert page.read_text() == (
-        "- [[Tasks]]\n\t- LATER second\n\t- LATER old\n\t- DONE first\n"
+        "- [[Tasks]]\n\t- DONE first\n\t- LATER second\n\t- LATER old\n"
     )
     assert capsys.readouterr().out == (
-        "LATER:\n1. [ ] second\n2. [ ] old\n\nDONE:\n3. [x] first\n"
+        "LATER:\n2. [ ] second\n3. [ ] old\n\nDONE:\n1. [x] first\n"
     )
 
 
-def test_writing_normalizes_goals_checked_in_logseq(
+def test_writing_keeps_order_of_tasks_checked_in_logseq(
     goals, tmp_path, monkeypatch, capsys
 ):
     page = tmp_path / "2026_09_25.md"
@@ -184,12 +182,12 @@ def test_writing_normalizes_goals_checked_in_logseq(
     )
     assert invoke(goals, monkeypatch, "mv", "2", "2", "--date", "2026-09-25") == 0
     assert page.read_text() == (
-        "- [[Tasks]]\n\t- LATER second\n\t- NOW fourth\n"
-        "\t- DONE first\n\t\t- proof\n\t- DONE third\n"
+        "- [[Tasks]]\n\t- DONE first\n\t\t- proof\n"
+        "\t- LATER second\n\t- DONE third\n\t- NOW fourth\n"
     )
     assert capsys.readouterr().out == (
-        "NOW:\n2. [ ] fourth\n\nLATER:\n1. [ ] second\n"
-        "\nDONE:\n3. [x] first\n   proof\n4. [x] third\n"
+        "NOW:\n4. [ ] fourth\n\nLATER:\n2. [ ] second\n"
+        "\nDONE:\n1. [x] first\n   proof\n3. [x] third\n"
     )
 
 
@@ -288,8 +286,8 @@ def test_get_one_and_note_preserve_status_and_other_blocks(
     )
     assert invoke(goals, monkeypatch, "mv", "2", "1", "--date", "2026-09-25") == 0
     capsys.readouterr()
-    assert invoke(goals, monkeypatch, "get", "2", "--date", "2026-09-25") == 0
-    assert capsys.readouterr().out == "2. [x] second\n   earlier note\n   next step\n"
+    assert invoke(goals, monkeypatch, "get", "1", "--date", "2026-09-25") == 0
+    assert capsys.readouterr().out == "1. [x] second\n   earlier note\n   next step\n"
 
 
 def test_get_missing_and_bad_notes_do_not_change_file(
@@ -427,10 +425,10 @@ def test_number_first_status_changes_preserve_notes_and_date(
     assert "NOW:\n1. [ ] first\n" in capsys.readouterr().out
     assert invoke(goals, monkeypatch, "1", "DONE", "--date", "2026-09-25") == 0
     assert page.read_text() == (
-        "- [[Tasks]]\n\t- DONE finished\n\t- DONE first\n\t\t- existing note\n"
+        "- [[Tasks]]\n\t- DONE first\n\t\t- existing note\n\t- DONE finished\n"
     )
-    assert "2. [x] first" in capsys.readouterr().out
-    assert invoke(goals, monkeypatch, "2", "later", "--date", "2026-09-25") == 0
+    assert "1. [x] first" in capsys.readouterr().out
+    assert invoke(goals, monkeypatch, "1", "later", "--date", "2026-09-25") == 0
     assert page.read_text() == (
         "- [[Tasks]]\n\t- LATER first\n\t\t- existing note\n\t- DONE finished\n"
     )
@@ -541,7 +539,9 @@ def test_carry_explicit_source_and_missing_source(goals, tmp_path, monkeypatch, 
     assert not (tmp_path / "2026_01_01.md").exists()
 
 
-def test_old_goals_header_is_read_and_rewritten_as_tasks(goals, tmp_path, monkeypatch, capsys):
+def test_old_goals_header_is_read_and_rewritten_as_tasks(
+    goals, tmp_path, monkeypatch, capsys
+):
     page = tmp_path / "2026_09_25.md"
     page.write_text("- [[Goals]]\n\t- LATER one\n- 09:00 log\n")
     original = page.read_text()
