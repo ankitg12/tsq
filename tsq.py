@@ -287,9 +287,10 @@ def goals_main() -> int:
 def main(kind: Block | None = None) -> int:
     argv = sys.argv[1:]
     if kind is None:
-        # `goals` may be a symlink to this file; `tsq --goals` is the same.
-        goals = Path(sys.argv[0]).name.startswith("goals") or "--goals" in argv
-        kind = GOALS if goals else TASKS
+        # `goals`, `gsq`, or `g` may be symlinks to this file; `tsq --goals` is the same.
+        name = Path(sys.argv[0]).name
+        is_goal = name in ("g", "gsq") or name.startswith("goals") or "--goals" in argv
+        kind = GOALS if is_goal else TASKS
     argv = [a for a in argv if a != "--goals"]
     p = argparse.ArgumentParser(
         prog=kind.prog,
