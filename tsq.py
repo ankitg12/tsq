@@ -36,7 +36,7 @@ Usage (set TSQ_JOURNALS_DIR for a graph outside ~/Logseq/journals):
 
 Goals: `goals` (or `tsq --goals`) runs the same commands on a `- [[Goals]]` block,
 which sits above Tasks. Goals are the day's few outcomes (a note warns above 3);
-tasks are the steps. Old `goal:: a; b` page properties are read as goals.
+tasks are the steps.
 Stdlib only: the layout is fixed and small, so no Logseq parser is needed.
 """
 
@@ -67,17 +67,16 @@ class Block:
     prog: str  # command name shown in help
     rank: int  # page order: lower ranks sit higher on the page
     soft_limit: int | None = None  # warn (never refuse) above this many open items
-    legacy_prop: str | None = None  # old `prop:: a; b` page-property form
 
     @property
     def header(self) -> str:
         return f"- [[{self.name}]]"
 
     def matches(self, line: str) -> bool:
-        return line.rstrip() in (self.header, f"- {self.name}")
+        return line.rstrip() == self.header
 
 
-GOALS = Block("Goals", "goals", rank=0, soft_limit=3, legacy_prop="goal")
+GOALS = Block("Goals", "goals", rank=0, soft_limit=3)
 TASKS = Block("Tasks", "tsq", rank=1)
 KINDS = (GOALS, TASKS)
 
@@ -122,12 +121,6 @@ class Page:
         rest = lines[i:]
         self.items: list[list[str]] = []
         self.parent_extra: list[str] = []  # e.g. `collapsed:: true` on the header
-        # 2026-09-25 page-property form: goal:: a; b (these are goals)
-        for p in list(self.props):
-            m = PROP_RE.match(p)
-            if m and m.group(1) == kind.legacy_prop:
-                self.items += [[f"\t- {g}"] for g in m.group(2).split("; ") if g]
-                self.props.remove(p)
         start = next((n for n, l in enumerate(rest) if kind.matches(l)), None)
         if start is not None:
             n = start + 1
