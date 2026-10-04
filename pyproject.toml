@@ -20,6 +20,7 @@ classifiers = [
 [project.scripts]
 tsq = "tsq:main"
 goals = "tsq:goals_main"
+gsq = "tsq:goals_main"
 
 [tool.setuptools]
 py-modules = ["tsq"]
