@@ -34,13 +34,15 @@ Usage (set TSQ_JOURNALS_DIR for a graph outside ~/Logseq/journals):
                                         had tasks (or --from) into today
   tsq history [N]                       tasks for the last N days (default 7)
 
-Also reads the older `- [[Goals]]` and `- Goals` blocks and `goal:: a; b` page properties;
-any write converts them to the format above.
+Goals: `goals` (or `tsq --goals`) runs the same commands on a `- [[Goals]]` block,
+which sits above Tasks. Goals are the day's few outcomes (a note warns above 3);
+tasks are the steps. Old `goal:: a; b` page properties are read as goals.
 Stdlib only: the layout is fixed and small, so no Logseq parser is needed.
 """
 
 import argparse
 import datetime
+from dataclasses import dataclass
 import os
 import re
 import sys
@@ -52,9 +54,38 @@ JOURNALS_DIR = Path(
 # Some older journals written on Windows are not valid UTF-8; surrogateescape
 # round-trips their bytes unchanged instead of failing or corrupting them.
 ENC = {"encoding": "utf-8", "errors": "surrogateescape"}
-HEADER = "- [[Tasks]]"
-# `[[Goals]]` was the header before 0.3.0; a write converts it to `[[Tasks]]`.
-HEADER_RE = re.compile(r"^- (\[\[(Tasks|Goals)\]\]|Tasks|Goals)\s*$")
+
+
+# Two blocks share this engine: [[Goals]] (the day's few outcomes, first on the
+# page) and [[Tasks]] (the steps). Run as `goals` (or `tsq --goals`) for Goals.
+@dataclass(frozen=True)
+class Block:
+    """One kind of daily list: which journal block it lives in and how it behaves.
+    Every function that reads or writes a page takes a Block; there is no mode state."""
+
+    name: str  # Logseq page the header links to, e.g. "Tasks"
+    prog: str  # command name shown in help
+    rank: int  # page order: lower ranks sit higher on the page
+    soft_limit: int | None = None  # warn (never refuse) above this many open items
+    legacy_prop: str | None = None  # old `prop:: a; b` page-property form
+
+    @property
+    def header(self) -> str:
+        return f"- [[{self.name}]]"
+
+    def matches(self, line: str) -> bool:
+        return line.rstrip() in (self.header, f"- {self.name}")
+
+
+GOALS = Block("Goals", "goals", rank=0, soft_limit=3, legacy_prop="goal")
+TASKS = Block("Tasks", "tsq", rank=1)
+KINDS = (GOALS, TASKS)
+
+
+def block_of(line: str) -> Block | None:
+    return next((b for b in KINDS if b.matches(line)), None)
+
+
 ITEM_RE = re.compile(r"^(\t| {2})- (.*)$")
 # Logseq task markers; goals are native tasks, so the checkbox works in Logseq too.
 # New goals use Logseq's LATER task marker; other workflows remain readable.
@@ -78,7 +109,8 @@ class Page:
     """A journal page split into: page properties, goal items, other lines.
     Each goal item keeps its raw lines (Logseq may add `id::` or child lines)."""
 
-    def __init__(self, content: str):
+    def __init__(self, content: str, kind: Block = TASKS):
+        self.kind = kind
         lines = content.splitlines()
         i = 0
         self.props: list[str] = []
@@ -90,13 +122,13 @@ class Page:
         rest = lines[i:]
         self.items: list[list[str]] = []
         self.parent_extra: list[str] = []  # e.g. `collapsed:: true` on the header
-        # 2026-09-25 page-property form: goal:: a; b
+        # 2026-09-25 page-property form: goal:: a; b (these are goals)
         for p in list(self.props):
             m = PROP_RE.match(p)
-            if m and m.group(1) == "goal":
+            if m and m.group(1) == kind.legacy_prop:
                 self.items += [[f"\t- {g}"] for g in m.group(2).split("; ") if g]
                 self.props.remove(p)
-        start = next((n for n, l in enumerate(rest) if HEADER_RE.match(l)), None)
+        start = next((n for n, l in enumerate(rest) if kind.matches(l)), None)
         if start is not None:
             n = start + 1
             while n < len(rest) and (
@@ -130,15 +162,27 @@ class Page:
         out = list(self.props)
         if out:
             out.append("")
+        body = list(self.body)
+        # Blocks of a lower rank (Goals above Tasks) stay above this one.
+        n = 0
+        while (
+            n < len(body)
+            and (other := block_of(body[n]))
+            and other.rank < self.kind.rank
+        ):
+            n += 1
+            while n < len(body) and body[n].startswith(("\t", " ")):
+                n += 1
+        out += body[:n]
         if self.items:
-            out += [HEADER] + self.parent_extra + [l for it in self.items for l in it]
-        out += self.body
+            out += [self.kind.header] + self.parent_extra
+            out += [l for it in self.items for l in it]
+        out += body[n:]
         return "\n".join(out) + "\n"
 
 
-def load(date_str: str | None) -> tuple[Path, Page]:
-    path = journal_path(date_str)
-    return path, Page(path.read_text(**ENC) if path.exists() else "")
+def read_page(path: Path, kind: Block) -> Page:
+    return Page(path.read_text(**ENC) if path.exists() else "", kind)
 
 
 def save(path: Path, page: Page) -> None:
@@ -148,12 +192,12 @@ def save(path: Path, page: Page) -> None:
     path.write_text(page.render(), **ENC)
 
 
-def carry_source(target: datetime.date) -> datetime.date | None:
+def carry_source(target: datetime.date, kind: Block) -> datetime.date | None:
     """The nearest day before target whose journal has at least one goal."""
     for back in range(1, CARRY_LOOKBACK_DAYS + 1):
         d = target - datetime.timedelta(days=back)
         path = journal_path(d.isoformat())
-        if path.exists() and Page(path.read_text(**ENC)).items:
+        if read_page(path, kind).items:
             return d
     return None
 
@@ -243,9 +287,19 @@ def split_opts(args: list[str]) -> tuple[list[str], list[str]]:
     return words, opts
 
 
-def main() -> int:
+def goals_main() -> int:
+    return main(GOALS)
+
+
+def main(kind: Block | None = None) -> int:
+    argv = sys.argv[1:]
+    if kind is None:
+        # `goals` may be a symlink to this file; `tsq --goals` is the same.
+        goals = Path(sys.argv[0]).name.startswith("goals") or "--goals" in argv
+        kind = GOALS if goals else TASKS
+    argv = [a for a in argv if a != "--goals"]
     p = argparse.ArgumentParser(
-        prog="tsq",
+        prog=kind.prog,
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -303,7 +357,12 @@ def main() -> int:
     )
     h = sub.add_parser("history", help="Tasks for the last N days")
     h.add_argument("days", nargs="?", type=int, default=7)
-    argv = ["-h" if a == "-?" else a for a in sys.argv[1:]]
+    p.add_argument(
+        "--goals",
+        action="store_true",
+        help="Use the [[Goals]] block (same as running `goals`)",
+    )
+    argv = ["-h" if a == "-?" else a for a in argv]
     offset = 2 if len(argv) >= 2 and argv[0] == "--date" else 0
     # A note given with a status change: `tsq N now "why"`.
     status_note: str | None = None
@@ -365,7 +424,7 @@ def main() -> int:
         for i in range(args.days - 1, -1, -1):
             d = today - datetime.timedelta(days=i)
             path = journal_path(d.isoformat())
-            pg = Page(path.read_text(**ENC) if path.exists() else "")
+            pg = read_page(path, kind)
             marked = [("✓ " if pg.done(k) else "") + g for k, g in enumerate(pg.goals)]
             score = (
                 f"{sum(map(pg.done, range(len(marked))))}/{len(marked)}  "
@@ -382,9 +441,9 @@ def main() -> int:
         if not path.exists():
             print("FILE_NOT_FOUND")
             return 1
-        page = Page(path.read_text(**ENC))
+        page = read_page(path, kind)
         if not page.items:
-            print("NO_TASKS")
+            print(f"NO_{kind.name.upper()}")
             return 1
         if args.cmd == "get":
             print_goal(page, index(page, args.n) + 1)
@@ -392,7 +451,8 @@ def main() -> int:
             print_goals(page, args.status)
         return 0
 
-    path, page = load(args.date)
+    path = journal_path(args.date)
+    page = read_page(path, kind)
     if args.cmd == "carry":
         target = (
             datetime.date.fromisoformat(args.date)
@@ -402,7 +462,7 @@ def main() -> int:
         source = (
             datetime.date.fromisoformat(args.source)
             if args.source
-            else carry_source(target)
+            else carry_source(target, kind)
         )
         if source is None:
             print(
@@ -413,7 +473,7 @@ def main() -> int:
             print("BAD_SOURCE: source and target are the same day.", file=sys.stderr)
             return 2
         src_path = journal_path(source.isoformat())
-        src = Page(src_path.read_text(**ENC) if src_path.exists() else "")
+        src = read_page(src_path, kind)
         carried, skipped = carry(page, src)
         note = f", {skipped} already present" if skipped else ""
         print(f"CARRIED {carried} from {source}{note}")
@@ -428,6 +488,13 @@ def main() -> int:
             print("BAD_TASK: one non-empty line.", file=sys.stderr)
             return 2
         page.items.append([f"\t- {args.add_status} {text}"])
+        open_n = sum(not page.done(i) for i in range(len(page.items)))
+        if kind.soft_limit and open_n > kind.soft_limit:
+            print(
+                f"NOTE: {open_n} open goals; a day holds about {kind.soft_limit}. "
+                "Is one of them a task (`tsq add`)?",
+                file=sys.stderr,
+            )
     elif args.cmd == "top":
         page.items.insert(0, page.items.pop(index(page, args.n)))
     elif args.cmd == "mv":

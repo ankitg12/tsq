@@ -556,14 +556,44 @@ def test_number_first_notes_and_notes_on_status_change(
     )
 
 
-def test_old_goals_header_is_read_and_rewritten_as_tasks(
+def invoke_goals(goals, monkeypatch, *args):
+    monkeypatch.setattr(sys, "argv", ["/x/goals", *args])
+    return goals.main()
+
+
+def test_goals_and_tasks_are_separate_blocks_goals_first(
     goals, tmp_path, monkeypatch, capsys
 ):
     page = tmp_path / "2026_09_25.md"
-    page.write_text("- [[Goals]]\n\t- LATER one\n- 09:00 log\n")
-    original = page.read_text()
-    assert invoke(goals, monkeypatch, "--date", "2026-09-25") == 0
-    assert capsys.readouterr().out == "LATER:\n1. [ ] one\n"
-    assert page.read_text() == original
-    assert invoke(goals, monkeypatch, "done", "1", "--date", "2026-09-25") == 0
-    assert page.read_text() == "- [[Tasks]]\n\t- DONE one\n- 09:00 log\n"
+    page.write_text("- [[Tasks]]\n\t- LATER step\n- 09:00 log\n")
+    d = ("--date", "2026-09-25")
+    assert invoke_goals(goals, monkeypatch, "add", "ship it", *d) == 0
+    assert page.read_text() == (
+        "- [[Goals]]\n\t- LATER ship it\n- [[Tasks]]\n\t- LATER step\n- 09:00 log\n"
+    )
+    capsys.readouterr()
+    # A Tasks write keeps Goals above it.
+    assert invoke(goals, monkeypatch, "done", "1", *d) == 0
+    assert page.read_text() == (
+        "- [[Goals]]\n\t- LATER ship it\n- [[Tasks]]\n\t- DONE step\n- 09:00 log\n"
+    )
+    capsys.readouterr()
+    assert invoke(goals, monkeypatch, "--goals", *d) == 0
+    assert capsys.readouterr().out == "LATER:\n1. [ ] ship it\n"
+
+
+def test_tasks_on_page_with_only_goals_go_below_them(goals, tmp_path, monkeypatch):
+    page = tmp_path / "2026_09_25.md"
+    page.write_text("- [[Goals]]\n\t- LATER g\n\t\t- note\n- 09:00 log\n")
+    assert invoke(goals, monkeypatch, "add", "t", "--date", "2026-09-25") == 0
+    assert page.read_text() == (
+        "- [[Goals]]\n\t- LATER g\n\t\t- note\n- [[Tasks]]\n\t- LATER t\n- 09:00 log\n"
+    )
+
+
+def test_goals_soft_limit_warns_but_writes(goals, tmp_path, monkeypatch, capsys):
+    page = tmp_path / "2026_09_25.md"
+    page.write_text("- [[Goals]]\n\t- LATER a\n\t- LATER b\n\t- LATER c\n")
+    assert invoke_goals(goals, monkeypatch, "add", "d", "--date", "2026-09-25") == 0
+    assert "4 open goals" in capsys.readouterr().err
+    assert page.read_text().endswith("\t- LATER d\n")

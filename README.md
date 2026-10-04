@@ -2,7 +2,9 @@
 
 `tsq` (task queue) is a small CLI for a **daily task queue in Logseq Markdown journals**. It reads and writes the first `- [[Tasks]]` block of each dated journal file. The journal is the only task store: edits made in Logseq appear in `tsq`, and edits made with `tsq` appear in Logseq.
 
-`tsq` complements [lsq](https://github.com/jrswab/lsq), the journal capture CLI. It does **not** call `lsq` or require the Logseq desktop app or HTTP API. It is not a long-term goal or project tracker. It was named `goalsq` before version 0.2.0. Before 0.3.0 the block was `- [[Goals]]`; `tsq` still reads it and writes `- [[Tasks]]` on the next change to that day.
+`tsq` complements [lsq](https://github.com/jrswab/lsq), the journal capture CLI. It does **not** call `lsq` or require the Logseq desktop app or HTTP API. It is not a long-term goal or project tracker. It was named `goalsq` before version 0.2.0.
+
+Since 0.6.0 the same commands also work on a separate `- [[Goals]]` block: run `goals` (or `tsq --goals`). Goals are the day's few outcomes and sit above Tasks on the page; `goals add` prints a note above three open goals but still writes. Tasks are the steps. Each block is described by a small `Block` value (`GOALS`, `TASKS`) that every read and write takes, so the two never share state.
 
 ## Install
 
@@ -41,7 +43,7 @@ tsq history 7                          # inspect the last seven days
 tsq carry                              # copy open items from the last day that had any
 ```
 
-`tsq carry` copies each open (not `DONE` or `CANCELED`) item, with its child notes, from the nearest earlier journal that has a `[[Goals]]` block (up to 30 days back), or from `--from YYYY-MM-DD`. It drops `id::` properties so that Logseq block ids stay unique, skips items whose title is already present, and leaves the source day unchanged. It is safe to run more than once.
+`tsq carry` copies each open (not `DONE` or `CANCELED`) item, with its child notes, from the nearest earlier journal that has a block of the same kind (up to 30 days back), or from `--from YYYY-MM-DD`. It drops `id::` properties so that Logseq block ids stay unique, skips items whose title is already present, and leaves the source day unchanged. It is safe to run more than once.
 
 `tsq --help` lists `mv`, `rm`, `undo`, and optional `due`, `blocked-on`, and `evidence` fields. Use `--date YYYY-MM-DD` to work on a different day. Item numbers refer to their positions in the journal, even when a status filter changes the display order.
 
