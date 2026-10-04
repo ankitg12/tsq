@@ -67,6 +67,7 @@ class Block:
     prog: str  # command name shown in help
     rank: int  # page order: lower ranks sit higher on the page
     soft_limit: int | None = None  # warn (never refuse) above this many open items
+    group_headers: bool = True  # show NOW/LATER group section headers
 
     @property
     def header(self) -> str:
@@ -76,8 +77,8 @@ class Block:
         return line.rstrip() == self.header
 
 
-GOALS = Block("Goals", "goals", rank=0, soft_limit=3)
-TASKS = Block("Tasks", "tsq", rank=1)
+GOALS = Block("Goals", "goals", rank=0, soft_limit=3, group_headers=False)
+TASKS = Block("Tasks", "tsq", rank=1, group_headers=True)
 KINDS = (GOALS, TASKS)
 
 
@@ -230,7 +231,7 @@ def goal_status(page: Page, i: int) -> str:
     return "NOW" if page.raw(i).startswith(("NOW ", "DOING ")) else "LATER"
 
 
-def print_goals(page: Page, status: str | None = None) -> None:
+def print_goals(page: Page, status: str | None = None, kind: Block = TASKS) -> None:
     # Group the view, not the journal: printed numbers still address raw blocks.
     printed = False
     for marker in ("NOW", "LATER", "DONE"):
@@ -244,11 +245,13 @@ def print_goals(page: Page, status: str | None = None) -> None:
         if not numbers:
             continue
         if status is None:
-            if printed:
-                print()
-            print(f"{marker}:")
+            if kind.group_headers or marker == "DONE":
+                if printed:
+                    print()
+                print(f"{marker}:")
         for n in numbers:
-            print_goal(page, n, show_status=False)
+            show_st = not kind.group_headers and marker == "NOW"
+            print_goal(page, n, show_status=show_st)
         printed = True
 
 
@@ -442,7 +445,7 @@ def main(kind: Block | None = None) -> int:
         if args.cmd == "get":
             print_goal(page, index(page, args.n) + 1)
         else:
-            print_goals(page, args.status)
+            print_goals(page, args.status, kind)
         return 0
 
     path = journal_path(args.date)
@@ -555,7 +558,7 @@ def main(kind: Block | None = None) -> int:
     elif args.cmd == "undo":
         page.set_marker(index(page, args.n), OPEN)
     save(path, page)
-    print_goals(page)
+    print_goals(page, kind=kind)
     return 0
 
 

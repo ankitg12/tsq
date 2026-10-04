@@ -579,7 +579,7 @@ def test_goals_and_tasks_are_separate_blocks_goals_first(
     )
     capsys.readouterr()
     assert invoke(goals, monkeypatch, "--goals", *d) == 0
-    assert capsys.readouterr().out == "LATER:\n1. [ ] ship it\n"
+    assert capsys.readouterr().out == "1. [ ] ship it\n"
 
 
 def test_tasks_on_page_with_only_goals_go_below_them(goals, tmp_path, monkeypatch):
