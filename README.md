@@ -31,6 +31,8 @@ Set it in your shell configuration if you use `tsq` often. Only Markdown journal
 ```sh
 tsq add -s now "Draft the review"
 tsq add "Check the test results"      # defaults to LATER
+tsq add --top "Answer the escalation" # insert as priority 1
+tsq add --at 3 "Rerun the sweep"      # insert at position 3
 tsq                                   # NOW, LATER, DONE in separate groups
 tsq -s now                            # show only NOW; numbers stay stable
 tsq 2                                 # inspect task 2 and its child notes

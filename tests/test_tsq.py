@@ -75,6 +75,40 @@ def test_add_rejects_unknown_status_without_writing(
     assert "default: LATER" in help_text
 
 
+def test_add_inserts_at_position_or_top(goals, tmp_path, monkeypatch, capsys):
+    page = tmp_path / "2026_09_25.md"
+    page.write_text(
+        "- [[Tasks]]\n\t- LATER first\n\t\t- child note\n\t- LATER second\n"
+        "- 10:00 journal entry\n"
+    )
+    d = ("--date", "2026-09-25")
+    assert invoke(goals, monkeypatch, "add", "--top", "urgent", *d) == 0
+    assert invoke(goals, monkeypatch, "add", "--at", "3", "middle", *d) == 0
+    assert invoke(goals, monkeypatch, "add", "--at", "99", "last", *d) == 0
+    assert invoke(goals, monkeypatch, "add", "-s", "now", "-t", "now top", *d) == 0
+    capsys.readouterr()
+    assert page.read_text() == (
+        "- [[Tasks]]\n\t- NOW now top\n\t- LATER urgent\n\t- LATER first\n"
+        "\t\t- child note\n\t- LATER middle\n\t- LATER second\n\t- LATER last\n"
+        "- 10:00 journal entry\n"
+    )
+
+
+def test_add_rejects_bad_position_without_writing(goals, tmp_path, monkeypatch, capsys):
+    page = tmp_path / "2026_09_25.md"
+    page.write_text("- [[Tasks]]\n\t- LATER first\n")
+    assert (
+        invoke(goals, monkeypatch, "add", "--at", "0", "x", "--date", "2026-09-25") == 2
+    )
+    assert "BAD_POSITION" in capsys.readouterr().err
+    with pytest.raises(SystemExit) as error:
+        invoke(
+            goals, monkeypatch, "add", "--top", "--at", "2", "x", "--date", "2026-09-25"
+        )
+    assert error.value.code == 2
+    assert page.read_text() == "- [[Tasks]]\n\t- LATER first\n"
+
+
 def test_done_note_is_nested_and_visible(goals, tmp_path, monkeypatch, capsys):
     page = tmp_path / "2026_09_25.md"
     page.write_text(

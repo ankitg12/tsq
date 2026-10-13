@@ -17,6 +17,8 @@ Usage (set TSQ_JOURNALS_DIR for a graph outside ~/Logseq/journals):
   tsq --status now|later|done           filter the list by status
   tsq N [--date YYYY-MM-DD]             show one task with its notes
   tsq add [-s now|later|done] "text"    append a task (default LATER)
+  tsq add --top "text"                  insert it as priority 1
+  tsq add --at M "text"                 insert it at position M
   tsq N now|later|done ["note"]         change status, optionally with a note
   tsq N note "text"                     append a note (also: add note, comment)
   tsq N set text "text"                 edit the task title
@@ -313,7 +315,9 @@ def main(kind: Block | None = None) -> int:
     sub = p.add_subparsers(dest="cmd")
     g = sub.add_parser("get", parents=[dp], help="Show one task with its notes")
     g.add_argument("n", type=int, help="Task number")
-    a = sub.add_parser("add", parents=[dp], help="Append a task")
+    a = sub.add_parser(
+        "add", parents=[dp], help="Append a task, or insert with --at/--top"
+    )
     a.add_argument(
         "-s",
         "--status",
@@ -322,6 +326,16 @@ def main(kind: Block | None = None) -> int:
         choices=("NOW", "LATER", "DONE"),
         default=OPEN,
         help="Initial status (default: LATER)",
+    )
+    where = a.add_mutually_exclusive_group()
+    where.add_argument(
+        "--at",
+        type=int,
+        metavar="M",
+        help="Insert at position M (1 = top; past the end appends)",
+    )
+    where.add_argument(
+        "-t", "--top", action="store_true", help="Insert at position 1 (same as --at 1)"
     )
     a.add_argument("text", nargs="+")
     s = sub.add_parser("set", parents=[dp], help="Set a task field or append a note")
@@ -484,7 +498,15 @@ def main(kind: Block | None = None) -> int:
         if not text or "\n" in text:
             print("BAD_TASK: one non-empty line.", file=sys.stderr)
             return 2
-        page.items.append([f"\t- {args.add_status} {text}"])
+        at = 1 if args.top else args.at
+        if at is not None and at < 1:
+            print(f"BAD_POSITION: {at} (positions start at 1)", file=sys.stderr)
+            return 2
+        item = [f"\t- {args.add_status} {text}"]
+        if at is None:
+            page.items.append(item)
+        else:
+            page.items.insert(min(at - 1, len(page.items)), item)
         open_n = sum(not page.done(i) for i in range(len(page.items)))
         if kind.soft_limit and open_n > kind.soft_limit:
             print(
